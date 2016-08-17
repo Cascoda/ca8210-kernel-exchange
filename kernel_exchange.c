@@ -38,9 +38,9 @@
 
 /******************************************************************************/
 
-#define DebugFSMount            ("/sys/kernel/debug")
-#define DriverNode              ("/ca8210")
-#define DriverFilePath          (DebugFSMount DriverNode)
+#define DebugFSMount            "/sys/kernel/debug"
+#define DriverNode              "/ca8210"
+#define DriverFilePath 			(DebugFSMount DriverNode)
 
 /******************************************************************************/
 
