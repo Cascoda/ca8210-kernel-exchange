@@ -29,9 +29,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 
@@ -95,6 +97,12 @@ int kernel_exchange_init(void)
 	if(initialised) return 1;
 
 	DriverFileDescriptor = open(DriverFilePath, O_RDWR);
+
+	if (DriverFileDescriptor == -1) {
+		fprintf(stderr, "Couldn't open driver node, errno = %d\n",
+			errno);
+		return -1;
+	}
 
 	cascoda_api_downstream = ca8210_test_int_exchange;
 
