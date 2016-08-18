@@ -33,6 +33,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "cascoda_api.h"
 
