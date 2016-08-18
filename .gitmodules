@@ -1,0 +1,3 @@
+[submodule "cascoda-api"]
+	path = cascoda-api
+	url = https://github.com/Cascoda/cascoda-api.git

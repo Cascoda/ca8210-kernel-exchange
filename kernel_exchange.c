@@ -33,14 +33,15 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "cascoda_api.h"
 
 /******************************************************************************/
 
-#define DebugFSMount            ("/sys/kernel/debug")
-#define DriverNode              ("/ca8210")
-#define DriverFilePath          (DebugFSMount DriverNode)
+#define DebugFSMount            "/sys/kernel/debug"
+#define DriverNode              "/ca8210"
+#define DriverFilePath 			(DebugFSMount DriverNode)
 
 /******************************************************************************/
 
@@ -56,6 +57,8 @@ static int ca8210_test_int_exchange(
 static int DriverFileDescriptor;
 static pthread_t rx_thread;
 static pthread_mutex_t rx_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t unhandled_sync_cond = PTHREAD_COND_INITIALIZER;
+static int unhandled_sync_count = 0;
 
 /******************************************************************************/
 
@@ -67,7 +70,15 @@ static void *ca8210_test_int_read_worker(void *arg)
 	while (1) {
 		pthread_mutex_lock(&rx_mutex);
 		rx_len = read(DriverFileDescriptor, rx_buf, 0);
+
+		if(rx_len > 0 && (rx_buf[0] & SPI_SYN)){	//Catch unhandled synchronous commands so synchronicity for future commands is not lost
+			unhandled_sync_count--;
+			assert(unhandled_sync_count >= 0);
+			pthread_cond_signal(&unhandled_sync_cond);
+		}
+
 		pthread_mutex_unlock(&rx_mutex);
+
 		if (rx_len > 0) {
 			cascoda_downstream_dispatch(rx_buf, rx_len);
 		}
@@ -79,12 +90,26 @@ static void *ca8210_test_int_read_worker(void *arg)
 int kernel_exchange_init(void)
 {
 	int ret;
+	static uint8_t initialised = 0;
+
+	if(initialised) return 1;
 
 	DriverFileDescriptor = open(DriverFilePath, O_RDWR);
 
 	cascoda_api_downstream = ca8210_test_int_exchange;
 
+	//Empty the receive buffer for clean start
+	size_t rx_len;
+	do{
+		uint8_t scrap[512];
+		rx_len = read(DriverFileDescriptor, scrap, 0);
+	} while (rx_len != 0);
+
+	unhandled_sync_count = 0;
+
 	ret = pthread_create(&rx_thread, NULL, ca8210_test_int_read_worker, NULL);
+
+	if(ret == 0) initialised = 1;
 	return ret;
 }
 
@@ -107,15 +132,31 @@ static int ca8210_test_int_exchange(
 )
 {
 	int status, Rx_Length;
-	uint8_t isSynchronous = ((buf[0] & SPI_SYN) && response);
+	const uint8_t isSynchronous = ((buf[0] & SPI_SYN) && response);
 
-	if(isSynchronous) pthread_mutex_lock(&rx_mutex);	//Enforce synchronous write then read
+	if(isSynchronous){
+		pthread_mutex_lock(&rx_mutex);	//Enforce synchronous write then read
+		while(unhandled_sync_count != 0) {pthread_cond_wait(&unhandled_sync_cond, &rx_mutex);}
+	}
+	else if(buf[0] & SPI_SYN){
+		pthread_mutex_lock(&rx_mutex);
+		unhandled_sync_count++;
+		pthread_mutex_unlock(&rx_mutex);
+	}
 
 	ca8210_test_int_write(buf, len);
 
 	if (isSynchronous) {
 		do {
 			Rx_Length = read(DriverFileDescriptor, response, NULL);
+
+			if(Rx_Length > 0 && !(response[0] & SPI_SYN)){
+				//Unexpected asynchronous response
+				//TODO: Perhaps queue this to be handled by the worker thread instead?
+				cascoda_downstream_dispatch(response, Rx_Length);
+				Rx_Length = 0;
+			}
+
 		} while (Rx_Length == 0);
 		pthread_mutex_unlock(&rx_mutex);
 	}
