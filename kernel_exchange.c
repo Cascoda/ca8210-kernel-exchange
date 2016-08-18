@@ -70,7 +70,7 @@ static void *ca8210_test_int_read_worker(void *arg)
 		pthread_mutex_lock(&rx_mutex);
 		rx_len = read(DriverFileDescriptor, rx_buf, 0);
 
-		if(rx_len > 0 && (buf[0] & SPI_SYN)){	//Catch unhandled synchronous commands so synchronicity for future commands is not lost
+		if(rx_len > 0 && (rx_buf[0] & SPI_SYN)){	//Catch unhandled synchronous commands so synchronicity for future commands is not lost
 			unhandled_sync_count--;
 			assert(unhandled_sync_count >= 0);
 			pthread_cond_signal(&unhandled_sync_cond);
