@@ -34,6 +34,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <string.h>
 
 #include "cascoda_api.h"
 
@@ -63,10 +64,10 @@ static int unhandled_sync_count = 0;
 
 /******************************************************************************/
 
-static struct buffer_queue{
+struct buffer_queue{
 	size_t len;
 	uint8_t * buf;
-	struct buffer_queue * next = NULL;
+	struct buffer_queue * next;
 };
 
 static struct buffer_queue * head_buffer_queue = NULL;
@@ -75,7 +76,7 @@ static struct buffer_queue * head_buffer_queue = NULL;
 static void add_to_queue(const uint8_t *buf, size_t len);
 
 //Retrieve a buffer into destBuf - this is a nonblocking function and will return 0 if nothing is retrieved from the queue
-static size_t pop_from_queue(uint8_t * destBuf, maxlen);
+static size_t pop_from_queue(uint8_t * destBuf, size_t maxlen);
 
 /******************************************************************************/
 
@@ -158,7 +159,7 @@ static int ca8210_test_int_exchange(
 	void *pDeviceRef
 )
 {
-	int status, Rx_Length;
+	int Rx_Length;
 	const uint8_t isSynchronous = ((buf[0] & SPI_SYN) && response);
 
 	if(isSynchronous){
@@ -217,11 +218,11 @@ static void add_to_queue(const uint8_t *buf, size_t len){
 	pthread_mutex_unlock(&buf_queue_mutex);
 }
 
-static size_t pop_from_queue(uint8_t * destBuf, maxlen){
+static size_t pop_from_queue(uint8_t * destBuf, size_t maxlen){
 
 	if(pthread_mutex_trylock(&buf_queue_mutex) == 0){
 
-		struct buffer_queue current = head_buffer_queue;
+		struct buffer_queue * current = head_buffer_queue;
 		size_t len = 0;
 
 		if(head_buffer_queue != NULL){
