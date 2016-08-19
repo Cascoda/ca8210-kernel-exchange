@@ -127,11 +127,13 @@ int kernel_exchange_init(void)
 	cascoda_api_downstream = ca8210_test_int_exchange;
 
 	//Empty the receive buffer for clean start
+	pthread_mutex_lock(&rx_mutex);
 	size_t rx_len;
 	do{
 		uint8_t scrap[512];
 		rx_len = read(DriverFileDescriptor, scrap, 0);
 	} while (rx_len != 0);
+	pthread_mutex_unlock(&rx_mutex);
 
 	unhandled_sync_count = 0;
 
@@ -199,6 +201,7 @@ static void add_to_queue(const uint8_t *buf, size_t len){
 		if(nextbuf == NULL){
 			//queue empty -> start new queue
 			head_buffer_queue = malloc(sizeof(struct buffer_queue));
+			memset(head_buffer_queue, 0, sizeof(struct buffer_queue));
 			nextbuf = head_buffer_queue;
 		}
 		else{
@@ -207,6 +210,7 @@ static void add_to_queue(const uint8_t *buf, size_t len){
 			}
 			//allocate new buffer cell
 			nextbuf->next = malloc(sizeof(struct buffer_queue));
+			memset(nextbuf->next, 0, sizeof(struct buffer_queue));
 			nextbuf = nextbuf->next;
 		}
 
