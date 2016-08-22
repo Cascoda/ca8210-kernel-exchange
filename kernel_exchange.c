@@ -36,6 +36,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <string.h>
 
 #include "cascoda_api.h"
 
@@ -59,8 +60,25 @@ static int ca8210_test_int_exchange(
 static int DriverFileDescriptor;
 static pthread_t rx_thread;
 static pthread_mutex_t rx_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t buf_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t unhandled_sync_cond = PTHREAD_COND_INITIALIZER;
 static int unhandled_sync_count = 0;
+
+/******************************************************************************/
+
+struct buffer_queue{
+	size_t len;
+	uint8_t * buf;
+	struct buffer_queue * next;
+};
+
+static struct buffer_queue * head_buffer_queue = NULL;
+
+//Add a buffer to the FIFO queue - this is a blocking function
+static void add_to_queue(const uint8_t *buf, size_t len);
+
+//Retrieve a buffer into destBuf - this is a nonblocking function and will return 0 if nothing is retrieved from the queue
+static size_t pop_from_queue(uint8_t * destBuf, size_t maxlen);
 
 /******************************************************************************/
 
@@ -70,16 +88,26 @@ static void *ca8210_test_int_read_worker(void *arg)
 	size_t rx_len;
 	/* TODO: while not told to exit? */
 	while (1) {
-		pthread_mutex_lock(&rx_mutex);
-		rx_len = read(DriverFileDescriptor, rx_buf, 0);
 
-		if(rx_len > 0 && (rx_buf[0] & SPI_SYN)){	//Catch unhandled synchronous commands so synchronicity for future commands is not lost
-			unhandled_sync_count--;
-			assert(unhandled_sync_count >= 0);
-			pthread_cond_signal(&unhandled_sync_cond);
+		rx_len = 0;
+
+		//try to get fresh data
+		if(pthread_mutex_trylock(&rx_mutex) == 0){
+			rx_len = read(DriverFileDescriptor, rx_buf, 0);
+
+			if(rx_len > 0 && (rx_buf[0] & SPI_SYN)){	//Catch unhandled synchronous commands so synchronicity for future commands is not lost
+				unhandled_sync_count--;
+				assert(unhandled_sync_count >= 0);
+				pthread_cond_signal(&unhandled_sync_cond);
+			}
+
+			pthread_mutex_unlock(&rx_mutex);
 		}
 
-		pthread_mutex_unlock(&rx_mutex);
+		//If nothing was received this cycle, get something from the queue
+		if(rx_len == 0){
+			rx_len = pop_from_queue(rx_buf, 512);
+		}
 
 		if (rx_len > 0) {
 			cascoda_downstream_dispatch(rx_buf, rx_len);
@@ -107,11 +135,13 @@ int kernel_exchange_init(void)
 	cascoda_api_downstream = ca8210_test_int_exchange;
 
 	//Empty the receive buffer for clean start
+	pthread_mutex_lock(&rx_mutex);
 	size_t rx_len;
 	do{
 		uint8_t scrap[512];
 		rx_len = read(DriverFileDescriptor, scrap, 0);
 	} while (rx_len != 0);
+	pthread_mutex_unlock(&rx_mutex);
 
 	unhandled_sync_count = 0;
 
@@ -139,7 +169,7 @@ static int ca8210_test_int_exchange(
 	void *pDeviceRef
 )
 {
-	int status, Rx_Length;
+	int Rx_Length;
 	const uint8_t isSynchronous = ((buf[0] & SPI_SYN) && response);
 
 	if(isSynchronous){
@@ -160,8 +190,7 @@ static int ca8210_test_int_exchange(
 
 			if(Rx_Length > 0 && !(response[0] & SPI_SYN)){
 				//Unexpected asynchronous response
-				//TODO: Perhaps queue this to be handled by the worker thread instead?
-				cascoda_downstream_dispatch(response, Rx_Length);
+				add_to_queue(response, Rx_Length);
 				Rx_Length = 0;
 			}
 
@@ -171,4 +200,58 @@ static int ca8210_test_int_exchange(
 
 
 	return 0;
+}
+
+static void add_to_queue(const uint8_t *buf, size_t len){
+	pthread_mutex_lock(&buf_queue_mutex);
+	{
+		struct buffer_queue * nextbuf = head_buffer_queue;
+		if(nextbuf == NULL){
+			//queue empty -> start new queue
+			head_buffer_queue = malloc(sizeof(struct buffer_queue));
+			memset(head_buffer_queue, 0, sizeof(struct buffer_queue));
+			nextbuf = head_buffer_queue;
+		}
+		else{
+			while(nextbuf->next != NULL){
+				nextbuf = nextbuf->next;
+			}
+			//allocate new buffer cell
+			nextbuf->next = malloc(sizeof(struct buffer_queue));
+			memset(nextbuf->next, 0, sizeof(struct buffer_queue));
+			nextbuf = nextbuf->next;
+		}
+
+		nextbuf->len = len;
+		nextbuf->buf = malloc(len);
+		memcpy(nextbuf->buf, buf, len);
+
+	}
+	pthread_mutex_unlock(&buf_queue_mutex);
+}
+
+static size_t pop_from_queue(uint8_t * destBuf, size_t maxlen){
+
+	if(pthread_mutex_trylock(&buf_queue_mutex) == 0){
+
+		struct buffer_queue * current = head_buffer_queue;
+		size_t len = 0;
+
+		if(head_buffer_queue != NULL){
+			head_buffer_queue = current->next;
+			len = current->len;
+
+			if(len > maxlen) len = 0;
+
+			memcpy(destBuf, current->buf, len);
+
+			free(current->buf);
+			free(current);
+		}
+
+		pthread_mutex_unlock(&buf_queue_mutex);
+		return len;
+	}
+	return 0;
+
 }
