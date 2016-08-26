@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+#include <errno.h>
 
 #include "cascoda_api.h"
 
@@ -153,6 +154,13 @@ static void ca8210_test_int_write(const uint8_t *buf, size_t len)
 		returnvalue = write(DriverFileDescriptor, buf+len-remaining, remaining);
 		if (returnvalue > 0)
 			remaining -= returnvalue;
+
+		if(returnvalue == -1){
+			//TODO: pass the error code to a callback of some sort so the end application can handle gracefully?
+			int error = errno;
+			assert(!errno);
+		}
+
 	} while (remaining > 0);
 	pthread_mutex_unlock(&tx_mutex);
 }
