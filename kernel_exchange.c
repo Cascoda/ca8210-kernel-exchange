@@ -39,6 +39,7 @@
 #include <unistd.h>
 
 #include "cascoda_api.h"
+#include "kernel_exchange.h"
 
 /******************************************************************************/
 
