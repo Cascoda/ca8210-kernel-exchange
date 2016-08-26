@@ -60,6 +60,7 @@ static int ca8210_test_int_exchange(
 static int DriverFileDescriptor;
 static pthread_t rx_thread;
 static pthread_mutex_t rx_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t tx_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t buf_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t unhandled_sync_cond = PTHREAD_COND_INITIALIZER;
 static int unhandled_sync_count = 0;
@@ -155,11 +156,13 @@ static void ca8210_test_int_write(const uint8_t *buf, size_t len)
 {
 	int returnvalue, remaining = len;
 
+	pthread_mutex_lock(&tx_mutex);
 	do {
 		returnvalue = write(DriverFileDescriptor, buf+len-remaining, remaining);
 		if (returnvalue > 0)
 			remaining -= returnvalue;
 	} while (remaining > 0);
+	pthread_mutex_unlock(&tx_mutex);
 }
 
 static int ca8210_test_int_exchange(
