@@ -37,8 +37,11 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+#include <errno.h>
+#include <unistd.h>
 
 #include "cascoda_api.h"
+#include "kernel_exchange.h"
 
 /******************************************************************************/
 
@@ -64,6 +67,8 @@ static pthread_mutex_t tx_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t buf_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t unhandled_sync_cond = PTHREAD_COND_INITIALIZER;
 static int unhandled_sync_count = 0;
+
+static kernel_exchange_errorhandler errorcallback;
 
 /******************************************************************************/
 
@@ -118,12 +123,18 @@ static void *ca8210_test_int_read_worker(void *arg)
 	return NULL;
 }
 
-int kernel_exchange_init(void)
+int kernel_exchange_init(void){
+	return kernel_exchange_init_withhandler(NULL);
+}
+
+int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback)
 {
 	int ret;
 	static uint8_t initialised = 0;
 
 	if(initialised) return 1;
+
+	errorcallback = callback;
 
 	DriverFileDescriptor = open(DriverFilePath, O_RDWR);
 
@@ -152,17 +163,38 @@ int kernel_exchange_init(void)
 	return ret;
 }
 
-static void ca8210_test_int_write(const uint8_t *buf, size_t len)
+static int ca8210_test_int_write(const uint8_t *buf, size_t len)
 {
 	int returnvalue, remaining = len;
+	int attempts = 0;
 
 	pthread_mutex_lock(&tx_mutex);
 	do {
 		returnvalue = write(DriverFileDescriptor, buf+len-remaining, remaining);
 		if (returnvalue > 0)
 			remaining -= returnvalue;
+
+		if(returnvalue == -1){
+			//TODO: pass the error code to a callback of some sort so the end application can handle gracefully?
+			int error = errno;
+
+			if(errno == EBUSY){	//If the error is that the device is busy, try again after a short wait
+				if(attempts++ < 5){
+					struct timespec toSleep;
+					toSleep.tv_sec = 0;
+					toSleep.tv_nsec = 50*1000000;
+					nanosleep(&toSleep, NULL);	//Sleep for ~50ms
+					continue;
+				}
+			}
+
+			pthread_mutex_unlock(&tx_mutex);
+			return error;
+		}
+
 	} while (remaining > 0);
 	pthread_mutex_unlock(&tx_mutex);
+	return 0;
 }
 
 static int ca8210_test_int_exchange(
@@ -172,7 +204,7 @@ static int ca8210_test_int_exchange(
 	void *pDeviceRef
 )
 {
-	int Rx_Length;
+	int Rx_Length, error;
 	const uint8_t isSynchronous = ((buf[0] & SPI_SYN) && response);
 
 	if(isSynchronous){
@@ -185,7 +217,23 @@ static int ca8210_test_int_exchange(
 		pthread_mutex_unlock(&rx_mutex);
 	}
 
-	ca8210_test_int_write(buf, len);
+	error = ca8210_test_int_write(buf, len);
+	if(error){
+		//Revert all state changes and release mutexes
+		if(isSynchronous)pthread_mutex_unlock(&rx_mutex);
+		else if(buf[0] & SPI_SYN){
+			pthread_mutex_lock(&rx_mutex);
+			unhandled_sync_count--;
+			pthread_mutex_unlock(&rx_mutex);
+		}
+
+		//Call the errorcallback or crash the program
+		if(errorcallback) errorcallback(error);
+		else abort();
+
+		//Return a failure to the next highest layer
+		return -1;
+	}
 
 	if (isSynchronous) {
 		do {
