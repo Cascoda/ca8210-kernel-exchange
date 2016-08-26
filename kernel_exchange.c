@@ -36,7 +36,7 @@
 #include <assert.h>
 #include <string.h>
 #include <errno.h>
-#include <time.h>
+#include <unistd.h>
 
 #include "cascoda_api.h"
 
@@ -169,9 +169,12 @@ static int ca8210_test_int_write(const uint8_t *buf, size_t len)
 			//TODO: pass the error code to a callback of some sort so the end application can handle gracefully?
 			int error = errno;
 
-			if(errno = EBUSY){	//If the error is that the device is busy, try again after a short wait
+			if(errno == EBUSY){	//If the error is that the device is busy, try again after a short wait
 				if(attempts++ < 5){
-					nanosleep(50*1000000);	//Sleep for 50ms
+					struct timespec toSleep;
+					toSleep.tv_sec = 0;
+					toSleep.tv_nsec = 50*1000000;
+					nanosleep(&toSleep, NULL);	//Sleep for ~50ms
 					continue;
 				}
 			}

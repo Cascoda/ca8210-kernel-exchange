@@ -36,7 +36,7 @@
  * to handle any chip errors which would otherwise
  * cause a crash.
  */
-int (*kernel_exchange_errorhandler)(
+typedef int (*kernel_exchange_errorhandler)(
 	int error_number
 );
 
