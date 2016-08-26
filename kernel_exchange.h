@@ -32,6 +32,25 @@
 #ifndef KERNEL_EXCHANGE_H
 #define KERNEL_EXCHANGE_H
 
+/* Optional callback for the application layer
+ * to handle any chip errors which would otherwise
+ * cause a crash.
+ */
+int (*kernel_exchange_errorhandler)(
+	int error_number
+);
+
+/*
+ * Must call ONE of the following functions in order to initialize driver communications
+ *
+ * Using kernel_exchange_init will cause the program to crash if there is an error
+ *
+ * Using kernel_exchange_init_withhandler and passing a callback function will cause
+ * that callback function to execute in the case of an error. Passing a callback of NULL causes
+ * the same behaviour as kernel_exchange_init.
+ */
+
 int kernel_exchange_init(void);
+int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback);
 
 #endif
