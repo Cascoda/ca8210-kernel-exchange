@@ -37,6 +37,7 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include <stdio.h>
 
 #include "cascoda_api.h"
 #include "kernel_exchange.h"
@@ -59,9 +60,11 @@ static int ca8210_test_int_exchange(
 /******************************************************************************/
 
 static int DriverFileDescriptor;
+static int LogFileDescriptor;
 static pthread_t rx_thread;
 static pthread_mutex_t rx_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t tx_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t buf_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t unhandled_sync_cond = PTHREAD_COND_INITIALIZER;
 static int unhandled_sync_count = 0;
@@ -90,6 +93,7 @@ static void *ca8210_test_int_read_worker(void *arg)
 {
 	uint8_t rx_buf[512];
 	size_t rx_len;
+	int i;
 	/* TODO: while not told to exit? */
 	while (1) {
 
@@ -98,6 +102,17 @@ static void *ca8210_test_int_read_worker(void *arg)
 		//try to get fresh data
 		if(pthread_mutex_trylock(&rx_mutex) == 0){
 			rx_len = read(DriverFileDescriptor, rx_buf, 0);
+
+			if (rx_len > 0) {
+				pthread_mutex_lock(&file_mutex);
+				fputs("\r\nReceived Async:",LogFileDescriptor);
+				for(i = 0; i < rx_len; i++){
+					fprintf(LogFileDescriptor, " %02x", rx_buf[i]);
+				}
+				fputs("\r\n",LogFileDescriptor);
+				fflush(LogFileDescriptor);
+				pthread_mutex_unlock(&file_mutex);
+			}
 
 			if(rx_len > 0 && (rx_buf[0] & SPI_SYN)){	//Catch unhandled synchronous commands so synchronicity for future commands is not lost
 				unhandled_sync_count--;
@@ -135,6 +150,7 @@ int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback)
 	errorcallback = callback;
 
 	DriverFileDescriptor = open(DriverFilePath, O_RDWR);
+	LogFileDescriptor = open("exchange.log", O_RDWR);
 
 	cascoda_api_downstream = ca8210_test_int_exchange;
 
@@ -158,7 +174,7 @@ int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback)
 static int ca8210_test_int_write(const uint8_t *buf, size_t len)
 {
 	int returnvalue, remaining = len;
-	int attempts = 0;
+	int i, attempts = 0;
 
 	pthread_mutex_lock(&tx_mutex);
 	do {
@@ -167,10 +183,9 @@ static int ca8210_test_int_write(const uint8_t *buf, size_t len)
 			remaining -= returnvalue;
 
 		if(returnvalue == -1){
-			//TODO: pass the error code to a callback of some sort so the end application can handle gracefully?
 			int error = errno;
 
-			if(errno == EBUSY || errno == EAGAIN){	//If the error is that the device is busy, try again after a short wait
+			if(errno == EAGAIN){	//If the error is that the device is busy, try again after a short wait
 				if(attempts++ < 5){
 					struct timespec toSleep;
 					toSleep.tv_sec = 0;
@@ -185,6 +200,16 @@ static int ca8210_test_int_write(const uint8_t *buf, size_t len)
 		}
 
 	} while (remaining > 0);
+
+	pthread_mutex_lock(&file_mutex);
+	fputs("\r\nWriting data:  ",LogFileDescriptor);
+	for(i = 0; i < rx_len; i++){
+		fprintf(LogFileDescriptor, " %02x", rx_buf[i]);
+	}
+	fputs("\r\n",LogFileDescriptor);
+	fflush(LogFileDescriptor);
+	pthread_mutex_unlock(&file_mutex);
+
 	pthread_mutex_unlock(&tx_mutex);
 	return 0;
 }
@@ -230,6 +255,17 @@ static int ca8210_test_int_exchange(
 	if (isSynchronous) {
 		do {
 			Rx_Length = read(DriverFileDescriptor, response, NULL);
+
+			if (rx_len > 0) {
+				pthread_mutex_lock(&file_mutex);
+				fputs("\r\nReceived  Sync:",LogFileDescriptor);
+				for(i = 0; i < rx_len; i++){
+					fprintf(LogFileDescriptor, " %02x", rx_buf[i]);
+				}
+				fputs("\r\n",LogFileDescriptor);
+				fflush(LogFileDescriptor);
+				pthread_mutex_unlock(&file_mutex);
+			}
 
 			if(Rx_Length > 0 && !(response[0] & SPI_SYN)){
 				//Unexpected asynchronous response
