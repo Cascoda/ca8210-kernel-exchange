@@ -151,6 +151,8 @@ int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback)
 
 	DriverFileDescriptor = open(DriverFilePath, O_RDWR);
 	LogFileDescriptor = fopen("exchange.log", "a");
+	fputs("\r\n-------------------NEW SESSION-------------------------",LogFileDescriptor);
+	fflush(LogFileDescriptor);
 
 	cascoda_api_downstream = ca8210_test_int_exchange;
 
