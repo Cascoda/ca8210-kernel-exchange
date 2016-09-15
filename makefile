@@ -1,6 +1,5 @@
 TARGET = libca8210.a
 LIBS = -lm
-CC = gcc
 CFLAGS = -g -Wall -pthread
 INCLUDEDIR = cascoda-api/include/
 SOURCEDIR = ./
