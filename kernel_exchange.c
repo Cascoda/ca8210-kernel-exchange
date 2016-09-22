@@ -38,6 +38,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <time.h>
 
 #include "cascoda_api.h"
 #include "kernel_exchange.h"
@@ -89,6 +90,15 @@ static size_t pop_from_queue(uint8_t * destBuf, size_t maxlen);
 
 /******************************************************************************/
 
+static void writeTime(FILE * stream){
+	struct timeval tv;
+	char timeString[40];
+
+	gettimeofday(&tv, NULL);
+	strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M:%S", localtime(&tv.tv_sec));
+	fprintf(stream, "\r\nat: %s.%06d ", timeString, (uint32_t)tv.tv_usec);
+}
+
 static void *ca8210_test_int_read_worker(void *arg)
 {
 	uint8_t rx_buf[512];
@@ -105,6 +115,7 @@ static void *ca8210_test_int_read_worker(void *arg)
 
 			if (rx_len > 0) {
 				pthread_mutex_lock(&file_mutex);
+				writeTime(LogFileDescriptor);
 				fputs("\r\nReceived Async:",LogFileDescriptor);
 				for(i = 0; i < rx_len; i++){
 					fprintf(LogFileDescriptor, " %02x", rx_buf[i]);
@@ -151,7 +162,7 @@ int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback)
 
 	DriverFileDescriptor = open(DriverFilePath, O_RDWR);
 	LogFileDescriptor = fopen("exchange.log", "a");
-	fputs("\r\n-------------------NEW SESSION-------------------------",LogFileDescriptor);
+	fputs("\r\n-------------------NEW SESSION-------------------------\r\n",LogFileDescriptor);
 	fflush(LogFileDescriptor);
 
 	cascoda_api_downstream = ca8210_test_int_exchange;
@@ -204,6 +215,7 @@ static int ca8210_test_int_write(const uint8_t *buf, size_t len)
 	} while (remaining > 0);
 
 	pthread_mutex_lock(&file_mutex);
+	writeTime(LogFileDescriptor);
 	fputs("\r\nWriting data:  ",LogFileDescriptor);
 	for(i = 0; i < len; i++){
 		fprintf(LogFileDescriptor, " %02x", buf[i]);
@@ -260,6 +272,7 @@ static int ca8210_test_int_exchange(
 
 			if (Rx_Length > 0) {
 				pthread_mutex_lock(&file_mutex);
+				writeTime(LogFileDescriptor);
 				fputs("\r\nReceived  Sync:",LogFileDescriptor);
 				for(i = 0; i < Rx_Length; i++){
 					fprintf(LogFileDescriptor, " %02x", response[i]);
