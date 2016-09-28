@@ -38,7 +38,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <stdio.h>
-#include <time.h>
+#include <sys/time.h>
 
 #include "cascoda_api.h"
 #include "kernel_exchange.h"
@@ -268,7 +268,7 @@ static int ca8210_test_int_exchange(
 
 	if (isSynchronous) {
 		do {
-			Rx_Length = read(DriverFileDescriptor, response, NULL);
+			Rx_Length = read(DriverFileDescriptor, response, (size_t) 0);
 
 			if (Rx_Length > 0) {
 				pthread_mutex_lock(&file_mutex);
