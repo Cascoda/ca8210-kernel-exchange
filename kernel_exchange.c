@@ -136,7 +136,7 @@ int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback)
 
 	errorcallback = callback;
 
-	DriverFileDescriptor = open(DriverFilePath, O_RDWR);
+	DriverFileDescriptor = open(DriverFilePath, O_RDWR | O_NONBLOCK);
 
 	if (DriverFileDescriptor == -1) {
 		fprintf(stderr, "Couldn't open driver node, errno = %d\n",
