@@ -123,10 +123,10 @@ static void *ca8210_test_int_read_worker(void *arg)
 		rx_len = 0;
 
 		//Wait until there is data available to read (or time out after 5 seconds)
-		int numActive = select(DriverFileDescriptor + 1, &rx_block_fd_set, NULL, NULL, &timeout);
+		select(DriverFileDescriptor + 1, &rx_block_fd_set, NULL, NULL, &timeout);
 
 		//try to get fresh data
-		if(numActive != 0 && pthread_mutex_trylock(&rx_mutex) == 0){
+		if(pthread_mutex_trylock(&rx_mutex) == 0){
 			rx_len = read(DriverFileDescriptor, rx_buf, 0);
 
 #ifdef USE_LOGFILE
