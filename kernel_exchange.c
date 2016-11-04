@@ -49,6 +49,8 @@
 #define DriverNode              "/ca8210"
 #define DriverFilePath 			(DebugFSMount DriverNode)
 
+#define USE_LOGFILE 1
+
 /******************************************************************************/
 
 static int ca8210_test_int_exchange(
@@ -61,14 +63,17 @@ static int ca8210_test_int_exchange(
 /******************************************************************************/
 
 static int DriverFileDescriptor;
-static FILE * LogFileDescriptor;
 static pthread_t rx_thread;
 static pthread_mutex_t rx_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t tx_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t buf_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t unhandled_sync_cond = PTHREAD_COND_INITIALIZER;
 static int unhandled_sync_count = 0;
+
+#ifdef USE_LOGFILE
+static FILE * LogFileDescriptor;
+static pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
 
 static kernel_exchange_errorhandler errorcallback;
 
@@ -113,6 +118,7 @@ static void *ca8210_test_int_read_worker(void *arg)
 		if(pthread_mutex_trylock(&rx_mutex) == 0){
 			rx_len = read(DriverFileDescriptor, rx_buf, 0);
 
+#ifdef USE_LOGFILE
 			if (rx_len > 0) {
 				pthread_mutex_lock(&file_mutex);
 				writeTime(LogFileDescriptor);
@@ -124,6 +130,7 @@ static void *ca8210_test_int_read_worker(void *arg)
 				fflush(LogFileDescriptor);
 				pthread_mutex_unlock(&file_mutex);
 			}
+#endif
 
 			if(rx_len > 0 && (rx_buf[0] & SPI_SYN)){	//Catch unhandled synchronous commands so synchronicity for future commands is not lost
 				unhandled_sync_count--;
@@ -160,10 +167,13 @@ int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback)
 
 	errorcallback = callback;
 
+	
 	DriverFileDescriptor = open(DriverFilePath, O_RDWR);
+#ifdef USE_LOGFILE
 	LogFileDescriptor = fopen("exchange.log", "a");
 	fputs("\r\n-------------------NEW SESSION-------------------------\r\n",LogFileDescriptor);
 	fflush(LogFileDescriptor);
+#endif
 
 	cascoda_api_downstream = ca8210_test_int_exchange;
 
@@ -214,6 +224,7 @@ static int ca8210_test_int_write(const uint8_t *buf, size_t len)
 
 	} while (remaining > 0);
 
+#ifdef USE_LOGFILE
 	pthread_mutex_lock(&file_mutex);
 	writeTime(LogFileDescriptor);
 	fputs("\r\nWriting data:  ",LogFileDescriptor);
@@ -223,6 +234,7 @@ static int ca8210_test_int_write(const uint8_t *buf, size_t len)
 	fputs("\r\n",LogFileDescriptor);
 	fflush(LogFileDescriptor);
 	pthread_mutex_unlock(&file_mutex);
+#endif
 
 	pthread_mutex_unlock(&tx_mutex);
 	return 0;
@@ -269,7 +281,8 @@ static int ca8210_test_int_exchange(
 	if (isSynchronous) {
 		do {
 			Rx_Length = read(DriverFileDescriptor, response, (size_t) 0);
-
+			
+#ifdef USE_LOGFILE
 			if (Rx_Length > 0) {
 				pthread_mutex_lock(&file_mutex);
 				writeTime(LogFileDescriptor);
@@ -281,6 +294,7 @@ static int ca8210_test_int_exchange(
 				fflush(LogFileDescriptor);
 				pthread_mutex_unlock(&file_mutex);
 			}
+#endif
 
 			if(Rx_Length > 0 && !(response[0] & SPI_SYN)){
 				//Unexpected asynchronous response
