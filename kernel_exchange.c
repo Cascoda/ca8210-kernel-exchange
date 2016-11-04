@@ -41,6 +41,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/time.h>
+#include <sys/select.h>
 
 #include "cascoda_api.h"
 #include "kernel_exchange.h"
@@ -71,6 +72,7 @@ static pthread_mutex_t tx_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t buf_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t unhandled_sync_cond = PTHREAD_COND_INITIALIZER;
 static int unhandled_sync_count = 0;
+static fd_set rx_block_fd_set;
 
 #ifdef USE_LOGFILE
 static FILE * LogFileDescriptor;
@@ -111,13 +113,20 @@ static void *ca8210_test_int_read_worker(void *arg)
 	uint8_t rx_buf[512];
 	size_t rx_len;
 	int i;
+	struct timeval timeout;
+	timeout.tv_sec = 5;
+	timeout.tv_usec = 0;
+
 	/* TODO: while not told to exit? */
 	while (1) {
 
 		rx_len = 0;
 
+		//Wait until there is data available to read (or time out after 5 seconds)
+		int numActive = select(DriverFileDescriptor + 1, rx_block_fd_set, NULL, NULL, &timeout);
+
 		//try to get fresh data
-		if(pthread_mutex_trylock(&rx_mutex) == 0){
+		if(numActive != 0 && pthread_mutex_trylock(&rx_mutex) == 0){
 			rx_len = read(DriverFileDescriptor, rx_buf, 0);
 
 #ifdef USE_LOGFILE
@@ -181,6 +190,9 @@ int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback)
 			errno);
 		return -1;
 	}
+
+	FD_ZERO(rx_block_fd_set);
+	FD_SET(DriverFileDescriptor, rx_block_fd_set);
 
 	cascoda_api_downstream = ca8210_test_int_exchange;
 
