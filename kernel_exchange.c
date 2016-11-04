@@ -29,9 +29,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
@@ -166,14 +168,19 @@ int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback)
 	if(initialised) return 1;
 
 	errorcallback = callback;
-
 	
-	DriverFileDescriptor = open(DriverFilePath, O_RDWR);
 #ifdef USE_LOGFILE
 	LogFileDescriptor = fopen("exchange.log", "a");
 	fputs("\r\n-------------------NEW SESSION-------------------------\r\n",LogFileDescriptor);
 	fflush(LogFileDescriptor);
 #endif
+	DriverFileDescriptor = open(DriverFilePath, O_RDWR | O_NONBLOCK);
+
+	if (DriverFileDescriptor == -1) {
+		fprintf(stderr, "Couldn't open driver node, errno = %d\n",
+			errno);
+		return -1;
+	}
 
 	cascoda_api_downstream = ca8210_test_int_exchange;
 
