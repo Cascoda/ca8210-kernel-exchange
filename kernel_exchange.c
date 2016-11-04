@@ -123,7 +123,7 @@ static void *ca8210_test_int_read_worker(void *arg)
 		rx_len = 0;
 
 		//Wait until there is data available to read (or time out after 5 seconds)
-		int numActive = select(DriverFileDescriptor + 1, rx_block_fd_set, NULL, NULL, &timeout);
+		int numActive = select(DriverFileDescriptor + 1, &rx_block_fd_set, NULL, NULL, &timeout);
 
 		//try to get fresh data
 		if(numActive != 0 && pthread_mutex_trylock(&rx_mutex) == 0){
@@ -191,8 +191,8 @@ int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback)
 		return -1;
 	}
 
-	FD_ZERO(rx_block_fd_set);
-	FD_SET(DriverFileDescriptor, rx_block_fd_set);
+	FD_ZERO(&rx_block_fd_set);
+	FD_SET(DriverFileDescriptor, &rx_block_fd_set);
 
 	cascoda_api_downstream = ca8210_test_int_exchange;
 
