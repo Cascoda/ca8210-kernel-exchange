@@ -141,7 +141,6 @@ static void *ca8210_test_int_read_worker(void *arg)
 					fprintf(LogFileDescriptor, " %02x", rx_buf[i]);
 				}
 				fputs("\r\n",LogFileDescriptor);
-				fflush(LogFileDescriptor);
 				pthread_mutex_unlock(&file_mutex);
 			}
 #endif
@@ -184,7 +183,6 @@ int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback)
 #ifdef USE_LOGFILE
 	LogFileDescriptor = fopen("exchange.log", "a");
 	fputs("\r\n-------------------NEW SESSION-------------------------\r\n",LogFileDescriptor);
-	fflush(LogFileDescriptor);
 #endif
 	DriverFileDescriptor = open(DriverFilePath, O_RDWR | O_NONBLOCK);
 
@@ -251,7 +249,6 @@ static int ca8210_test_int_write(const uint8_t *buf, size_t len)
 		fprintf(LogFileDescriptor, " %02x", buf[i]);
 	}
 	fputs("\r\n",LogFileDescriptor);
-	fflush(LogFileDescriptor);
 	pthread_mutex_unlock(&file_mutex);
 #endif
 
@@ -310,7 +307,6 @@ static int ca8210_test_int_exchange(
 					fprintf(LogFileDescriptor, " %02x", response[i]);
 				}
 				fputs("\r\n",LogFileDescriptor);
-				fflush(LogFileDescriptor);
 				pthread_mutex_unlock(&file_mutex);
 			}
 #endif
