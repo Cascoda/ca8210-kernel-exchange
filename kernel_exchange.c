@@ -42,6 +42,7 @@
 #include <stdio.h>
 #include <sys/time.h>
 #include <sys/select.h>
+#include <sys/ioctl.h>
 
 #include "cascoda_api.h"
 #include "kernel_exchange.h"
@@ -53,6 +54,7 @@
 #define DriverFilePath 			(DebugFSMount DriverNode)
 
 #define USE_LOGFILE 1
+#define CA8210_IOCTL_HARD_RESET (0)
 
 /******************************************************************************/
 
@@ -209,6 +211,11 @@ int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback)
 
 	if(ret == 0) initialised = 1;
 	return ret;
+}
+
+int ca8210_test_int_reset(unsigned long resettime)
+{
+	return ioctl(DriverFileDescriptor, CA8210_IOCTL_HARD_RESET, resettime);
 }
 
 static int ca8210_test_int_write(const uint8_t *buf, size_t len)

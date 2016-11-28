@@ -52,5 +52,6 @@ typedef int (*kernel_exchange_errorhandler)(
 
 int kernel_exchange_init(void);
 int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback);
+int ca8210_test_int_reset(unsigned long resettime);
 
 #endif
