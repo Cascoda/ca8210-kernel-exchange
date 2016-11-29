@@ -20,8 +20,8 @@ HEADERS = $(wildcard $(INCLUDEDIR),*.h)
 
 $(TARGET): $(OBJECTS)
 	cp cascoda-api/libcascoda.a ./libcascoda.a
-	ar -x libcascoda.a
-	ar rcs $(TARGET) *.o
+	$(AR) -x libcascoda.a
+	$(AR) rcs $(TARGET) *.o
 
 clean:
 	-rm -f $(SOURCEDIR)*.o
