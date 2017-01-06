@@ -1,9 +1,9 @@
 TARGET = libca8210.a
 LIBS = -lm
 CFLAGS = -g -Wall -pthread
-INCLUDEDIR = cascoda-api/include/
+INCLUDEDIR = ca821x-api/include/
 SOURCEDIR = ./
-SUBDIRS = cascoda-api
+SUBDIRS = ca821x-api
 
 .PHONY: default all clean subdirs $(SUBDIRS)
 
@@ -19,7 +19,7 @@ HEADERS = $(wildcard $(INCLUDEDIR),*.h)
 .PRECIOUS: $(TARGET) $(OBJECTS)
 
 $(TARGET): $(OBJECTS)
-	cp cascoda-api/libcascoda.a ./libcascoda.a
+	cp ca821x-api/libcascoda.a ./libcascoda.a
 	$(AR) -x libcascoda.a
 	$(AR) rcs $(TARGET) *.o
 
