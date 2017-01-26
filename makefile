@@ -19,8 +19,8 @@ HEADERS = $(wildcard $(INCLUDEDIR),*.h)
 .PRECIOUS: $(TARGET) $(OBJECTS)
 
 $(TARGET): $(OBJECTS)
-	cp ca821x-api/libcascoda.a ./libcascoda.a
-	$(AR) -x libcascoda.a
+	cp ca821x-api/libca821x.a ./libca821x.a
+	$(AR) -x libca821x.a
 	$(AR) rcs $(TARGET) *.o
 
 clean:

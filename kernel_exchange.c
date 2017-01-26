@@ -44,7 +44,7 @@
 #include <sys/select.h>
 #include <sys/ioctl.h>
 
-#include "cascoda_api.h"
+#include "ca821x_api.h"
 #include "kernel_exchange.h"
 
 /******************************************************************************/
@@ -162,7 +162,7 @@ static void *ca8210_test_int_read_worker(void *arg)
 		}
 
 		if (rx_len > 0) {
-			cascoda_downstream_dispatch(rx_buf, rx_len);
+			ca821x_downstream_dispatch(rx_buf, rx_len);
 		}
 	}
 
@@ -194,7 +194,7 @@ int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback)
 		return -1;
 	}
 
-	cascoda_api_downstream = ca8210_test_int_exchange;
+	ca821x_api_downstream = ca8210_test_int_exchange;
 
 	//Empty the receive buffer for clean start
 	pthread_mutex_lock(&rx_mutex);
