@@ -69,11 +69,14 @@ static int ca8210_test_int_exchange(
 
 static int DriverFileDescriptor;
 static pthread_t rx_thread;
+static pthread_mutex_t flag_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t rx_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t tx_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t buf_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t unhandled_sync_cond = PTHREAD_COND_INITIALIZER;
 static int unhandled_sync_count = 0;
+static uint8_t worker_flag = 0;
+static uint8_t initialised = 0;
 static fd_set rx_block_fd_set;
 
 #ifdef USE_LOGFILE
@@ -119,8 +122,9 @@ static void *ca8210_test_int_read_worker(void *arg)
 	timeout.tv_sec = 5;
 	timeout.tv_usec = 0;
 
-	/* TODO: while not told to exit? */
-	while (1) {
+	pthread_mutex_lock(&flag_mutex);
+	while (worker_flag) {
+		pthread_mutex_unlock(&flag_mutex);
 
 		rx_len = 0;
 
@@ -164,6 +168,7 @@ static void *ca8210_test_int_read_worker(void *arg)
 		if (rx_len > 0) {
 			ca821x_downstream_dispatch(rx_buf, rx_len);
 		}
+		pthread_mutex_lock(&flag_mutex);
 	}
 
 	return NULL;
@@ -176,7 +181,6 @@ int kernel_exchange_init(void){
 int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback)
 {
 	int ret;
-	static uint8_t initialised = 0;
 
 	if(initialised) return 1;
 
@@ -207,10 +211,48 @@ int kernel_exchange_init_withhandler(kernel_exchange_errorhandler callback)
 
 	unhandled_sync_count = 0;
 
+	pthread_mutex_lock(&flag_mutex);
+	worker_flag = 1;
+	pthread_mutex_unlock(&flag_mutex);
+
 	ret = pthread_create(&rx_thread, NULL, ca8210_test_int_read_worker, NULL);
 
 	if(ret == 0) initialised = 1;
 	return ret;
+}
+
+void kernel_exchange_deinit(void){
+	int ret;
+
+	//Cause the worker thread to terminate
+	pthread_mutex_lock(&flag_mutex);
+	worker_flag = 0;
+	pthread_mutex_unlock(&flag_mutex);
+
+	//Lock all mutexes
+	pthread_mutex_lock(&tx_mutex);
+	pthread_mutex_lock(&rx_mutex);
+	pthread_mutex_lock(&buf_queue_mutex);
+#ifdef USE_LOGFILE
+	pthread_mutex_lock(&file_mutex);
+	do{
+		ret = close(LogFileDescriptor);
+	} while(ret < 0 && errno == EINTR);
+#endif
+
+	//close the driver file
+	do{
+		ret = close(DriverFileDescriptor);
+	} while(ret < 0 && errno == EINTR);
+	initialised = 0;
+
+	//unlock all mutexes
+#ifdef USE_LOGFILE
+	pthread_mutex_unlock(&file_mutex);
+#endif
+	pthread_mutex_unlock(&buf_queue_mutex);
+	pthread_mutex_unlock(&rx_mutex);
+	pthread_mutex_unlock(&tx_mutex);
 }
 
 int ca8210_test_int_reset(unsigned long resettime)
