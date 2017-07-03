@@ -236,7 +236,7 @@ void kernel_exchange_deinit(void){
 #ifdef USE_LOGFILE
 	pthread_mutex_lock(&file_mutex);
 	do{
-		ret = close(LogFileDescriptor);
+		ret = fclose(LogFileDescriptor);
 	} while(ret < 0 && errno == EINTR);
 #endif
 
