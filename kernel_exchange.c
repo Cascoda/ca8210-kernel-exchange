@@ -166,7 +166,7 @@ static void *ca8210_test_int_read_worker(void *arg)
 		}
 
 		if (rx_len > 0) {
-			ca821x_downstream_dispatch(rx_buf, rx_len);
+			ca821x_downstream_dispatch(rx_buf, rx_len, &DriverFileDescriptor);
 		}
 		pthread_mutex_lock(&flag_mutex);
 	}
